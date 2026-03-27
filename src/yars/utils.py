@@ -82,12 +82,62 @@ def export_to_json(data, filename="output.json"):
 
 
 def export_to_csv(data, filename="output.csv"):
+    """Export a flat list of dicts to CSV. Works for post search and comment search results."""
+    if not data:
+        print("No data to export.")
+        return
     try:
-        keys = data[0].keys()
+        keys = list(data[0].keys())
         with open(filename, "w", newline="", encoding="utf-8") as output_file:
-            dict_writer = csv.DictWriter(output_file, fieldnames=keys)
-            dict_writer.writeheader()
-            dict_writer.writerows(data)
+            writer = csv.DictWriter(output_file, fieldnames=keys, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(data)
         print(f"Data successfully exported to {filename}")
     except Exception as e:
         print(f"Error exporting to CSV: {e}")
+
+
+def _flatten_comments(comments, post_title, post_body, depth=0, parent_author=""):
+    rows = []
+    for comment in comments:
+        rows.append(
+            {
+                "post_title": post_title,
+                "post_body": post_body[:500],
+                "depth": depth,
+                "parent_author": parent_author,
+                "author": comment.get("author", ""),
+                "body": comment.get("body", ""),
+                "score": comment.get("score", ""),
+            }
+        )
+        replies = comment.get("replies", [])
+        if replies:
+            rows.extend(
+                _flatten_comments(replies, post_title, post_body, depth + 1, comment.get("author", ""))
+            )
+    return rows
+
+
+def export_post_details_to_csv(post_details, filename="comments.csv"):
+    """Flatten a scrape_post_details result into one row per comment and export to CSV."""
+    if not post_details:
+        print("No data to export.")
+        return
+    try:
+        rows = _flatten_comments(
+            post_details.get("comments", []),
+            post_details.get("title", ""),
+            post_details.get("body", ""),
+        )
+        if not rows:
+            print("No comments to export.")
+            return
+        keys = ["post_title", "post_body", "depth", "parent_author", "author", "body", "score"]
+        with open(filename, "w", newline="", encoding="utf-8") as output_file:
+            writer = csv.DictWriter(output_file, fieldnames=keys)
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"{len(rows)} comments exported to {filename}")
+    except Exception as e:
+        print(f"Error exporting post details to CSV: {e}")
